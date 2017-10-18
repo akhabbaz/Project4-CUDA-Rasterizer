@@ -64,6 +64,14 @@ float calculateBarycentricCoordinateValue(glm::vec2 a, glm::vec2 b, glm::vec2 c,
     baryTri[2] = glm::vec3(c, 0);
     return calculateSignedArea(baryTri) / calculateSignedArea(tri);
 }
+// clamped output
+__host__ __device__ static float clamp(float in)
+{
+	if ( in < 0.f) {
+		return 0.0f;
+	}
+	return in;
+}
 
 // CHECKITOUT
 /**
