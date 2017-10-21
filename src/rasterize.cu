@@ -224,7 +224,6 @@ void initDepth(int w, int h, float * depth)
 	{
 		int index = x + (y * w);
 		float max = 100000.f;
-		int * maxptr = (int *)(&max);
 		depth[index] = max;
 	}
 }
@@ -816,9 +815,9 @@ __device__ float updateFragmentClosestDepth(Fragment* fragmentBuffer, const Frag
         {
 
                 assumed = old;
-
-                old = atomicCAS((unsigned int*)addr, __float_as_int(assumed), __float_as_int(value));
-		if ( old == assumed) {
+                float minval = fminf(value, assumed);
+                old = atomicCAS((unsigned int*)addr, __float_as_int(assumed), __float_as_int(minval));
+		if ( old == assumed  && minval == value) {
 			*fragmentBuffer = *currentFragment;
 		}
 
@@ -953,7 +952,7 @@ __global__  void rasterizeTriangles (int numTriangles, Fragment* fragmentBuffer,
 					// only one will update the fragment.
 					fragmentdepth = updateFragmentClosestDepth(fragmentBuffer + pix, &fragbuffer,
 						dev_depth + pix, fragmentdepth);
-					fragmentBuffer[pix] = fragbuffer;
+				//	fragmentBuffer[pix] = fragbuffer;
 				   }
 			   }
 		   }
