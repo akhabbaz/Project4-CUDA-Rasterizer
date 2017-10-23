@@ -9,7 +9,7 @@
 
 
 #include "main.hpp"
-
+static string input_filename;
 #define STB_IMAGE_IMPLEMENTATION
 #define TINYGLTF_LOADER_IMPLEMENTATION
 #include <util/tiny_gltf_loader.h>
@@ -18,6 +18,7 @@
 //-------------MAIN--------------
 //-------------------------------
 
+void shut_down(int return_code); 
 int main(int argc, char **argv) {
     if (argc != 2) {
         cout << "Usage: [gltf file]. Press Enter to exit" << endl;
@@ -28,7 +29,7 @@ int main(int argc, char **argv) {
 	tinygltf::Scene scene;
 	tinygltf::TinyGLTFLoader loader;
 	std::string err;
-	std::string input_filename(argv[1]);
+	input_filename = argv[1];
 	std::string ext = getFilePathExtension(input_filename);
 
 	bool ret = false;
@@ -59,7 +60,7 @@ int main(int argc, char **argv) {
         // GLFW main loop
         mainLoop();
     }
-
+    shut_down(0);
     return 0;
 }
 
@@ -192,6 +193,13 @@ bool init(const tinygltf::Scene & scene) {
     return true;
 }
 
+std::string currentTimeString() {
+    time_t now;
+    time(&now);
+    char buf[sizeof "0000-00-00_00-00-00z"];
+    strftime(buf, sizeof buf, "%Y-%m-%d_%H-%M-%Sz", gmtime(&now));
+    return std::string(buf);
+}
 void initPBO() {
     // set up vertex data parameter
     int num_texels = width * height;
@@ -263,6 +271,28 @@ void initVAO(void) {
     glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(indices), indices, GL_STATIC_DRAW);
 }
 
+void saveImage() {
+	// output image file
+	image img(width, height);
+	glm::vec3* imgCpy{ new glm::vec3(width * height) };
+	updateImageCPU(width, height, imgCpy);
+    for (int x = 0; x < width; x++) {
+        for (int y = 0; y < height; y++) {
+            int index = x + (y * width);
+            glm::vec3 pix = imgCpy[index];
+            img.setPixel(width - 1 - x, y, glm::vec3(pix));
+        }
+    }
+	delete[] imgCpy;
+
+    std::ostringstream ss;
+    ss << input_filename << "." << currentTimeString;
+    std::string filename = ss.str();
+
+    // CHECKITOUT
+    img.savePNG(filename);
+    //img.saveHDR(filename);  // Save a Radiance HDR file
+}
 
 GLuint initShader() {
     const char *attribLocations[] = { "Position", "Tex" };
@@ -327,6 +357,7 @@ void errorCallback(int error, const char *description) {
 void keyCallback(GLFWwindow *window, int key, int scancode, int action, int mods) {
     if (key == GLFW_KEY_ESCAPE && action == GLFW_PRESS) {
         glfwSetWindowShouldClose(window, GL_TRUE);
+	//	saveImage();
     }
 }
 

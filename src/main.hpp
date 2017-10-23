@@ -22,8 +22,9 @@
 #include <glm/glm.hpp>
 #include <util/glslUtility.hpp>
 #include <util/utilityCore.hpp>
-
+#include <ctime>
 #include "rasterize.h"
+#include "image.h"
 
 using namespace std;
 

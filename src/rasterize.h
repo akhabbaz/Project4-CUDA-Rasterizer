@@ -22,3 +22,4 @@ void rasterizeSetBuffers(const tinygltf::Scene & scene);
 
 void rasterize(uchar4 *pbo, const glm::mat4 & MVP, const glm::mat4 & MV, const glm::mat3 MV_normal);
 void rasterizeFree();
+void updateImageCPU(int width, int height, glm::vec3 * image);

@@ -114,6 +114,8 @@ static Primitive *dev_primitives = NULL;
 static Fragment *dev_fragmentBuffer = NULL;
 static glm::vec3 *dev_framebuffer = NULL;
 static dim3 numThreadsPerBlock(128);
+static int * dev_mutex = NULL;	     // THis buffer is for storing a 0 1 mutex where 
+                                     // 1 means the resource is taken and 0 means it is not
 static float * dev_depth = NULL;	// you might need this buffer when doing depth test
 // A point light source for global illumination
 // numLights number of light source
@@ -194,6 +196,10 @@ void rasterizeInit(int w, int h) {
     
 	cudaFree(dev_depth);
 	cudaMalloc(&dev_depth, width * height * sizeof(float));
+	cudaFree(dev_mutex);
+	cudaMalloc(&dev_mutex, width * height * sizeof(int));
+	//initialize dev_mutex to 0
+	cudaMemset(dev_mutex, 0, width * height * sizeof(int));
 // 4 Malloc for the light direction
 	{
 		cudaMalloc(&dev_lightDirection, numLights * sizeof(VertexAttributePosition));
@@ -803,61 +809,28 @@ __host__ __device__ FragmentAttributeColor uvColor(int texWidth, int texHeight, 
 // update fragmentBuffer only if the current depth is less than the depth already stored
 // this is an atomic operation.
 __device__ float updateFragmentClosestDepth(Fragment* fragmentBuffer, const Fragment * currentFragment, 
-		                            float * addr, float value)
+		                            float * addr, int * dev_mutex, float value)
 {
    
         float old = *addr, assumed;
-
-        if(old <= value) return old;
-
-        do
-
-        {
-
-                assumed = old;
+	int oldInt = __float_as_int(old);
+	int valueInt = __float_as_int(value);
+	int assumedInt, minInt;
+        if(oldInt <= valueInt) 
+		return old;
+        do{
+		assumedInt =  oldInt; // __float_as_int(assumed);
+		assumed  = __int_as_float(assumedInt);
                 float minval = fminf(value, assumed);
-                old = atomicCAS((unsigned int*)addr, __float_as_int(assumed), __float_as_int(minval));
-		if ( old == assumed  && minval == value) {
+		minInt = __float_as_int(minval);
+                oldInt = atomicCAS((unsigned int*)addr, assumedInt, minInt);
+		if ( oldInt == assumedInt  && minInt == valueInt) {
 			*fragmentBuffer = *currentFragment;
 		}
+        }while(oldInt!=assumedInt);
 
-        }while(old!=assumed);
-
-        return old; 
+        return value;
 }
-// update fragmentBuffer only if the current depth is less than the depth already stored
-// this is an atomic operation.
-//__device__ float updateFragmentClosestDepth(Fragment* fragmentBuffer, const Fragment * currentFragment, 
-//		                            int * dev_depth, float newDepth)
-//{
-//    const int * newVal = (int *) &newDepth;
-//	int old = *dev_depth, assumed;
-//	// old always has the current *dev_depth. if atomicCas 1
-//	// fails old is *dev_depth.  if the first succeeeds and 
-//	// the second one fails (another
-//	// thread wrote to the buffer) then old is *dev_depth. If they
-//	// both succeed then *dev_depth will not change in the second call.
-//	do {
-//	      float * current { (float*) &old};
-//	      assumed = old;
-//	      // fragment fails the depth test
-//	      if ( *current > newDepth) {
-//		      return *current;
-//	      }
-//	      // this failure means another thread wrote to the
-//	      // buffer
-//	      old = atomicCAS(dev_depth, assumed, *newVal);
-//	      // No one else wrote to the depth and this is the
-//	      // closest fragment
-//	      if ( old == assumed) {
-//		      // update the fragmentBuffer because no other thread wrote 
-//			  // to the depth buffer
-//		      *fragmentBuffer= *currentFragment;
-//		      // check if no one else wrote to depth buffer
-//	      }
-//	}while (old != assumed);
-//	return newDepth;
-//}
 
 // returns the world space barycentric coordinates as a vec3 given the pixelSpace barycentric coordinates
 // , the triangle in pixel space and the zpixel of the desired pixel.
@@ -893,7 +866,7 @@ __host__ __device__ glm::vec2 baryCentricAvg(const glm::vec3 bC, const glm::vec2
 }
 // perform rasterization on the triangles
 __global__  void rasterizeTriangles (int numTriangles, Fragment* fragmentBuffer, Primitive * dev_primitives,  
-		float * dev_depth, 
+		float * dev_depth, int * dev_mutex, 
 		int width, int height)
 {
 
@@ -950,8 +923,8 @@ __global__  void rasterizeTriangles (int numTriangles, Fragment* fragmentBuffer,
 					// this will update the depth only when this pixel wins the depth buffer test
 					// in case two threads decide to write to the same fragment buffer at the same time
 					// only one will update the fragment.
-					fragmentdepth = updateFragmentClosestDepth(fragmentBuffer + pix, &fragbuffer,
-						dev_depth + pix, fragmentdepth);
+				     fragmentdepth = updateFragmentClosestDepth(fragmentBuffer + pix, &fragbuffer,
+					    dev_depth + pix, dev_mutex + pix, fragmentdepth);
 				//	fragmentBuffer[pix] = fragbuffer;
 				   }
 			   }
@@ -1034,7 +1007,7 @@ void rasterize(uchar4 *pbo, const glm::mat4 & MVP, const glm::mat4 & MV, const g
 				dim3 numBlocksForTriangles{ gridSize(p->numPrimitives) };
 				rasterizeTriangles << <numBlocksForTriangles, numThreadsPerBlock >> > (
 					p->numPrimitives, dev_fragmentBuffer, dev_primitives + 
-					   curPrimitiveBeginId, dev_depth, width, height);
+					   curPrimitiveBeginId, dev_depth, dev_mutex, width, height);
 				checkCUDAError("Rasterizer");
 				curPrimitiveBeginId += p->numPrimitives;
 			}
@@ -1052,7 +1025,11 @@ void rasterize(uchar4 *pbo, const glm::mat4 & MVP, const glm::mat4 & MV, const g
     sendImageToPBO<<<blockCount2d, blockSize2d>>>(pbo, width, height, dev_framebuffer);
     checkCUDAError("copy render result to pbo");
 }
-
+// copies frameBuffer to image
+void updateImageCPU(int width, int height, glm::vec3 * image)
+{
+	cudaMemcpy(image, dev_framebuffer, width * height *sizeof(glm::vec3), cudaMemcpyDeviceToHost);
+}
 /**
  * Called once at the end of the program to free CUDA memory.
  */
@@ -1088,6 +1065,8 @@ void rasterizeFree() {
 	cudaFree(dev_framebuffer);
 	dev_framebuffer = NULL;
 
+	cudaFree(dev_mutex);
+	dev_mutex = NULL;
 	cudaFree(dev_depth);
 	dev_depth = NULL;
 	cudaFree(dev_lightColor);
