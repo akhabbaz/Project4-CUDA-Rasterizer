@@ -812,26 +812,27 @@ __device__ float updateFragmentClosestDepth(Fragment* fragmentBuffer, const Frag
 		                            float * addr, int * dev_mutex, float value)
 {
    
-        float old = *addr, assumed;
-	int oldInt = __float_as_int(old);
-	int valueInt = __float_as_int(value);
-	int assumedInt, minInt;
-        if(oldInt <= valueInt) 
-		return old;
+        float old = *addr;
+		bool haveKey = false;
         do{
-		assumedInt =  oldInt; // __float_as_int(assumed);
-		assumed  = __int_as_float(assumedInt);
-                float minval = fminf(value, assumed);
-		minInt = __float_as_int(minval);
-                oldInt = atomicCAS((unsigned int*)addr, assumedInt, minInt);
-		if ( oldInt == assumedInt  && minInt == valueInt) {
-			*fragmentBuffer = *currentFragment;
+		if (old <= value) {
+			break;
 		}
-        }while(oldInt!=assumedInt);
+		// need to update the depth buffer
+		int val = atomicCAS( dev_mutex, 0, 1);
+		bool haveKey = val == 0;
+		if ( haveKey) {
+			*fragmentBuffer = *currentFragment;
+			*addr = value;
+			*dev_mutex = 0;
+		}
+		else {
+			old = *addr;
+		}
+        }while(haveKey);
 
-        return value;
+        return old;
 }
-
 // returns the world space barycentric coordinates as a vec3 given the pixelSpace barycentric coordinates
 // , the triangle in pixel space and the zpixel of the desired pixel.
 // One way to see this is that 1/zPixel is proportional to z world and pixB[0] is proportional to 
@@ -925,7 +926,7 @@ __global__  void rasterizeTriangles (int numTriangles, Fragment* fragmentBuffer,
 					// only one will update the fragment.
 				     fragmentdepth = updateFragmentClosestDepth(fragmentBuffer + pix, &fragbuffer,
 					    dev_depth + pix, dev_mutex + pix, fragmentdepth);
-				//	fragmentBuffer[pix] = fragbuffer;
+					//fragmentBuffer[pix] = fragbuffer;
 				   }
 			   }
 		   }
@@ -1076,4 +1077,28 @@ void rasterizeFree() {
 	cudaFree(dev_currentLightDirection);
 	dev_currentLightDirection = NULL;
 	checkCUDAError("rasterize Free");
+
 }
+//__device__ float updateFragmentClosestDepth(Fragment* fragmentBuffer, const Fragment * currentFragment, 
+//		                            float * addr, int * dev_mutex, float value)
+//{
+//   
+//        float old = *addr, assumed;
+//	int oldInt = __float_as_int(old);
+//	int valueInt = __float_as_int(value);
+//	int assumedInt, minInt;
+//        if(oldInt <= valueInt) 
+//		return old;
+//        do{
+//		assumedInt =  oldInt; // __float_as_int(assumed);
+//		assumed  = __int_as_float(assumedInt);
+//                float minval = fminf(value, assumed);
+//		minInt = __float_as_int(minval);
+//                oldInt = atomicCAS((unsigned int*)addr, assumedInt, minInt);
+//		if ( oldInt == assumedInt  && minInt == valueInt) {
+//			*fragmentBuffer = *currentFragment;
+//		}
+//        }while(oldInt!=assumedInt);
+//
+//        return value;
+//}

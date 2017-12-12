@@ -18,6 +18,7 @@ static string input_filename;
 //-------------MAIN--------------
 //-------------------------------
 
+void saveImage();
 void shut_down(int return_code); 
 int main(int argc, char **argv) {
     if (argc != 2) {
@@ -274,7 +275,7 @@ void initVAO(void) {
 void saveImage() {
 	// output image file
 	image img(width, height);
-	glm::vec3* imgCpy{ new glm::vec3(width * height) };
+	glm::vec3* imgCpy{ new glm::vec3(100 * width * height) };
 	updateImageCPU(width, height, imgCpy);
     for (int x = 0; x < width; x++) {
         for (int y = 0; y < height; y++) {
@@ -357,7 +358,6 @@ void errorCallback(int error, const char *description) {
 void keyCallback(GLFWwindow *window, int key, int scancode, int action, int mods) {
     if (key == GLFW_KEY_ESCAPE && action == GLFW_PRESS) {
         glfwSetWindowShouldClose(window, GL_TRUE);
-	//	saveImage();
     }
 }
 
