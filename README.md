@@ -14,7 +14,7 @@ images:
 
 ![](renders/duck_diffuseRendered.png)
 ![](renders/duck_2.png)
-![](renders/milkTruck.png)
+![](renders/milkTruckLatest.png)
 
 This project was to write a rasterizer from scratch. I first got the triangle to work. Getting an image at all was quite a challenge.
 
@@ -33,6 +33,12 @@ I also correctly got the depth using atomicCAS() to resolve data races.  I used 
 I wrote the shader too.  It takes two lights and calculates Lambertian reflection using the light direction and the normal.  The images look good in that real shadows can be seen as with the duck. 
 
 I rarely see the depth buffer drawing fragments that should be culled. The perspective with the milk truck appears to distort but I think that may have to do with the supplied transformation matrices.  Also the program crashes with some moves especially when the obect is close to the front of the screen.
+
+After first submitting this I replaced the atomic cas code and used a mutex. That waits until there are not two reads of the same fragment, and then updates the fragment buffer. In this image you can see that the underside of the milktruck renders properly.  The windows are red and that is because there is no texture for them in open GL. Aside from that problem, I think that the atomicCAS is working. 
+
+Other things that are working are that when one pans or zooms the MilkTruck stays in perspective.
+
+I was not able to figure out why the image distorts so much.
  
 
 ### Credits
