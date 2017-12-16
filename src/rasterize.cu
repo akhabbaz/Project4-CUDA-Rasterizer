@@ -134,7 +134,6 @@ static   FragmentAttributeColor*  dev_lightColor;
 static   VertexAttributePosition* dev_currentLightDirection;
 static constexpr int BytesPerPixel {3};
 
-
 /**
  * Kernel that writes the image to the OpenGL PBO directly.
  */
@@ -229,8 +228,9 @@ void initDepth(int w, int h, float * depth)
 	if (x < w && y < h)
 	{
 		int index = x + (y * w);
-		float max = 100000.f;
-		depth[index] = max;
+		//float max = 100000.f;
+		float  min = - 10000.f;
+		depth[index] = min;
 	}
 }
 
@@ -815,7 +815,7 @@ __device__ float updateFragmentClosestDepth(Fragment* fragmentBuffer, const Frag
         float old = *addr;
 		bool haveKey = false;
         do{
-		if (old <= value) {
+		if (old >= value) {
 			break;
 		}
 		// need to update the depth buffer
@@ -924,9 +924,9 @@ __global__  void rasterizeTriangles (int numTriangles, Fragment* fragmentBuffer,
 					// this will update the depth only when this pixel wins the depth buffer test
 					// in case two threads decide to write to the same fragment buffer at the same time
 					// only one will update the fragment.
-				     fragmentdepth = updateFragmentClosestDepth(fragmentBuffer + pix, &fragbuffer,
+				        fragmentdepth = updateFragmentClosestDepth(fragmentBuffer + pix, &fragbuffer,
 					    dev_depth + pix, dev_mutex + pix, fragmentdepth);
-					fragmentBuffer[pix] = fragbuffer;
+				    	//fragmentBuffer[pix] = fragbuffer;
 				   }
 			   }
 		   }
