@@ -134,7 +134,6 @@ static   FragmentAttributeColor*  dev_lightColor;
 static   VertexAttributePosition* dev_currentLightDirection;
 static constexpr int BytesPerPixel {3};
 
-
 /**
  * Kernel that writes the image to the OpenGL PBO directly.
  */
@@ -229,8 +228,9 @@ void initDepth(int w, int h, float * depth)
 	if (x < w && y < h)
 	{
 		int index = x + (y * w);
-		float max = 100000.f;
-		depth[index] = max;
+		//float max = 100000.f;
+		float  min = - 10000.f;
+		depth[index] = min;
 	}
 }
 
@@ -815,7 +815,7 @@ __device__ float updateFragmentClosestDepth(Fragment* fragmentBuffer, const Frag
         float old = *addr;
 		bool haveKey = false;
         do{
-		if (old <= value) {
+		if (old >= value) {
 			break;
 		}
 		// need to update the depth buffer
@@ -897,22 +897,27 @@ __global__  void rasterizeTriangles (int numTriangles, Fragment* fragmentBuffer,
 			   // the zdepth in pixel space
 			   if (isBarycentricCoordInBounds(bC)) {
 				   int pix = i + width * j;
+				   float fragmentdepth =  getZAtCoordinate(bC, tri);
+				   // convert to Barycentric coordinates in world Space
+				   bC = worldSpaceBarycentricCoordinates(bC, tri, fragmentdepth);
+				   VertexAttributeTexcoord uvPoint {baryCentricAvg(bC, 
+				   		prim.v[0].texcoord0, prim.v[1].texcoord0, 
+				   		prim.v[2].texcoord0)};
+				   Fragment fragbuffer;
+				   fragbuffer.eyePos = baryCentricAvg(bC, prim.v[0].eyePos, prim.v[1].eyePos,
+				   		      prim.v[2].eyePos);
+				   fragbuffer.eyeNor = baryCentricAvg(bC, prim.v[0].eyeNor, prim.v[1].eyeNor,
+					                   prim.v[2].eyeNor);
 				   // Barycentric UV coordinate
 				   // no texture
 				   // printf("%d %d %d\n", prim.v[0].diffuseTexWidth,
 				   //	   prim.v[0].dev_diffuseTex);
+
 				   if(prim.v[0].diffuseTexWidth == 0) {
 					   // default color is red
-					   fragmentBuffer[pix].color = glm::vec3(0.8f, 0.0f, 0.0f);
+					   fragbuffer.color = glm::vec3(0.8f, 0.0f, 0.0f);
 				   }
 				   else {
-					float fragmentdepth =  getZAtCoordinate(bC, tri);
-					// convert to Barycentric coordinates in world Space
-					bC = worldSpaceBarycentricCoordinates(bC, tri, fragmentdepth);
-					VertexAttributeTexcoord uvPoint {baryCentricAvg(bC, 
-							prim.v[0].texcoord0, prim.v[1].texcoord0, 
-							prim.v[2].texcoord0)};
-					Fragment fragbuffer;
 					fragbuffer.color = uvColor(prim.v[0].diffuseTexWidth,
 						   prim.v[0].diffuseTexHeight,
 						   &uvPoint, prim.v[0].dev_diffuseTex);
@@ -927,6 +932,12 @@ __global__  void rasterizeTriangles (int numTriangles, Fragment* fragmentBuffer,
 					    dev_depth + pix, dev_mutex + pix, fragmentdepth);
 				//	fragmentBuffer[pix] = fragbuffer;
 				   }
+				   // this will update the depth only when this pixel wins the depth buffer test
+				   // in case two threads decide to write to the same fragment buffer at the same time
+				   // only one will update the fragment.
+				   fragmentdepth = updateFragmentClosestDepth(fragmentBuffer + pix, &fragbuffer,
+				       dev_depth + pix, dev_mutex + pix, fragmentdepth);
+				   //fragmentBuffer[pix] = fragbuffer;
 			   }
 		   }
 			 
