@@ -830,7 +830,6 @@ __device__ float updateFragmentClosestDepth(Fragment* fragmentBuffer, const Frag
 			old = *addr;
 		}
         }while(haveKey);
-
         return old;
 }
 // returns the world space barycentric coordinates as a vec3 given the pixelSpace barycentric coordinates
@@ -926,7 +925,7 @@ __global__  void rasterizeTriangles (int numTriangles, Fragment* fragmentBuffer,
 					// only one will update the fragment.
 				     fragmentdepth = updateFragmentClosestDepth(fragmentBuffer + pix, &fragbuffer,
 					    dev_depth + pix, dev_mutex + pix, fragmentdepth);
-					//fragmentBuffer[pix] = fragbuffer;
+				//	fragmentBuffer[pix] = fragbuffer;
 				   }
 			   }
 		   }
